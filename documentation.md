@@ -13,7 +13,7 @@
 
 ## Project Overview
 
-**AudioScribeSummarize** (also known as YOOM) is a modern video conferencing application that replicates Zoom's core functionality with an added AI-powered feature for automatic meeting summarization. The application enables users to create, join, schedule, and record video meetings, with the ability to generate intelligent summaries of recorded meetings using Google's Gemini AI.
+**AudioScribeSummarize** (also known as AudioScribe) is a modern video conferencing application that replicates Zoom's core functionality with an added AI-powered feature for automatic meeting summarization. The application enables users to create, join, schedule, and record video meetings, with the ability to generate intelligent summaries of recorded meetings using Google's Gemini AI.
 
 ### Key Features
 - Real-time video conferencing with multiple participants
