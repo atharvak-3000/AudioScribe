@@ -82,8 +82,33 @@ const CallList = ({ type }: { type: 'ended' | 'upcoming' | 'recordings' }) => {
               'No Description'
             }
             date={
-              (meeting as Call).state?.startsAt?.toLocaleString() ||
-              (meeting as CallRecording).start_time?.toLocaleString()
+              (meeting as Call).state?.startsAt
+                ? new Date((meeting as Call).state!.startsAt!).toLocaleString(
+                    'en-IN',
+                    {
+                      timeZone: 'Asia/Kolkata',
+                      weekday: 'short',
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    },
+                  )
+                : (meeting as CallRecording).start_time
+                  ? new Date((meeting as CallRecording).start_time).toLocaleString(
+                      'en-IN',
+                      {
+                        timeZone: 'Asia/Kolkata',
+                        weekday: 'short',
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      },
+                    )
+                  : 'Date not available'
             }
             isPreviousMeeting={type === 'ended'}
             link={

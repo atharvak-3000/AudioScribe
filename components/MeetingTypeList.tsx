@@ -18,6 +18,7 @@ const initialValues = {
   dateTime: new Date(),
   description: '',
   link: '',
+  participants: '',
 };
 
 const MeetingTypeList = () => {
@@ -53,6 +54,23 @@ const MeetingTypeList = () => {
         },
       });
       setCallDetail(call);
+
+      if (values.participants) {
+        const emails = values.participants
+          .split(/[ ,;]+/)
+          .filter((email) => email.trim() !== '')
+          .join(',');
+
+        const meetingUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/meeting/${call.id}`;
+        const subject = `Join my meeting: ${description}`;
+        const body = `Please join the meeting at: ${meetingUrl}`;
+        const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${emails}&su=${encodeURIComponent(
+          subject,
+        )}&body=${encodeURIComponent(body)}`;
+
+        window.open(gmailLink, '_blank');
+      }
+
       if (!values.description) {
         router.push(`/meeting/${call.id}`);
       }
@@ -108,12 +126,25 @@ const MeetingTypeList = () => {
         >
           <div className="flex flex-col gap-2.5">
             <label className="text-base font-normal leading-[22.4px] text-sky-2">
-              Add a description
+              Meeting Name
             </label>
-            <Textarea
+            <Input
+              placeholder="Enter meeting name"
               className="border-none bg-dark-3 focus-visible:ring-0 focus-visible:ring-offset-0"
               onChange={(e) =>
                 setValues({ ...values, description: e.target.value })
+              }
+            />
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <label className="text-base font-normal leading-[22.4px] text-sky-2">
+              Add Guest Emails
+            </label>
+            <Input
+              placeholder="Enter emails separated by commas"
+              className="border-none bg-dark-3 focus-visible:ring-0 focus-visible:ring-offset-0"
+              onChange={(e) =>
+                setValues({ ...values, participants: e.target.value })
               }
             />
           </div>
