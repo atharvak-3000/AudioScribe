@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { currentUser } from '@clerk/nextjs/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { StreamClient } from '@stream-io/node-sdk';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { recordingUrl, recordingId } = body;
+    const { recordingUrl, recordingId, callId } = body;
 
     if (!recordingUrl) {
       return NextResponse.json(
@@ -29,10 +30,62 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!callId) {
+      console.warn('No callId provided, summary will not be persisted to the call object.');
+    } else {
+      // Initialize Stream Client to check/save summary
+      const geminiApiKey = process.env.GEMINI_API_KEY;
+      const streamApiKey = process.env.NEXT_PUBLIC_STREAM_API_KEY;
+      const streamApiSecret = process.env.STREAM_SECRET_KEY;
+
+      if (streamApiKey && streamApiSecret) {
+        try {
+          const streamClient = new StreamClient(streamApiKey, streamApiSecret);
+          const call = streamClient.video.call('default', callId);
+
+          // Fetch current call data
+          const callData = await call.get();
+
+          // Check if summary already exists
+          if (callData.call.custom.summary) {
+            console.log('Returning existing summary for call:', callId);
+            return NextResponse.json({
+              summary: callData.call.custom.summary,
+              recordingId,
+              timestamp: new Date().toISOString(),
+              source: 'existing'
+            });
+          }
+        } catch (streamError) {
+          console.error('Error fetching call data:', streamError);
+          // Continue to generate summary if fetching failed
+        }
+      }
+    }
+
     console.log('Starting summarization for recording:', recordingUrl.substring(0, 100));
     const summary = await generateSummary(recordingUrl);
 
-    return NextResponse.json({ 
+    // Save summary to Stream Call if callId is available
+    if (callId) {
+      const streamApiKey = process.env.NEXT_PUBLIC_STREAM_API_KEY;
+      const streamApiSecret = process.env.STREAM_SECRET_KEY;
+
+      if (streamApiKey && streamApiSecret) {
+        try {
+          const streamClient = new StreamClient(streamApiKey, streamApiSecret);
+          const call = streamClient.video.call('default', callId);
+          await call.update({
+            custom: { summary }
+          });
+          console.log('Summary saved to call:', callId);
+        } catch (saveError) {
+          console.error('Failed to save summary to Stream:', saveError);
+        }
+      }
+    }
+
+    return NextResponse.json({
       summary,
       recordingId,
       timestamp: new Date().toISOString()
@@ -47,7 +100,7 @@ export async function POST(request: NextRequest) {
       error: JSON.stringify(error, Object.getOwnPropertyNames(error)),
     });
     return NextResponse.json(
-      { 
+      {
         error: errorMessage,
         details: process.env.NODE_ENV === 'development' ? errorStack : undefined
       },
@@ -58,7 +111,7 @@ export async function POST(request: NextRequest) {
 
 async function generateSummary(recordingUrl: string): Promise<string> {
   const geminiApiKey = process.env.GEMINI_API_KEY;
-  
+
   if (!geminiApiKey) {
     throw new Error('GEMINI_API_KEY is not configured in environment variables. Please add it to your .env.local file.');
   }
@@ -66,11 +119,11 @@ async function generateSummary(recordingUrl: string): Promise<string> {
   try {
     // Initialize Gemini AI
     const genAI = new GoogleGenerativeAI(geminiApiKey);
-    
+
     // Download the recording file
     console.log('Downloading recording from:', recordingUrl);
     const recordingResponse = await fetch(recordingUrl);
-    
+
     if (!recordingResponse.ok) {
       throw new Error(`Failed to fetch recording: ${recordingResponse.statusText}`);
     }
@@ -78,7 +131,7 @@ async function generateSummary(recordingUrl: string): Promise<string> {
     // Get content length to check file size (free tier has limits)
     const contentLength = recordingResponse.headers.get('content-length');
     const fileSizeInMB = contentLength ? parseInt(contentLength) / (1024 * 1024) : 0;
-    
+
     // Free tier typically supports up to ~20MB for files
     // For larger files, we might need to handle differently
     if (fileSizeInMB > 20) {
@@ -88,10 +141,10 @@ async function generateSummary(recordingUrl: string): Promise<string> {
     // Get the recording as a buffer
     const recordingBuffer = await recordingResponse.arrayBuffer();
     const recordingBase64 = Buffer.from(recordingBuffer).toString('base64');
-    
+
     // Determine MIME type from response headers or URL extension
     let contentType = recordingResponse.headers.get('content-type');
-    
+
     // If content type is not available, try to infer from URL
     if (!contentType) {
       if (recordingUrl.includes('.mp4') || recordingUrl.includes('.webm')) {
@@ -104,7 +157,7 @@ async function generateSummary(recordingUrl: string): Promise<string> {
         contentType = 'video/mp4'; // Default for Stream recordings
       }
     }
-    
+
     console.log(`Processing recording with content type: ${contentType}, size: ${fileSizeInMB.toFixed(2)}MB`);
 
     // List available models first to see what we have access to
@@ -122,28 +175,28 @@ async function generateSummary(recordingUrl: string): Promise<string> {
     } catch (err) {
       console.warn('Error fetching model list:', err);
     }
-    
+
     // For free tier, try available models in order of preference
     // Try models that support multimodal content first
-    const modelNamesToTry = availableModels.length > 0 
+    const modelNamesToTry = availableModels.length > 0
       ? availableModels.filter((m: string) => m.includes('gemini'))
       : [
-          'gemini-pro',           // Most common free tier model
-          'gemini-1.5-pro',       // Newer model
-          'gemini-1.5-flash',     // Faster model
-          'gemini-1.0-pro',       // Older version
-        ];
-    
+        'gemini-pro',           // Most common free tier model
+        'gemini-1.5-pro',       // Newer model
+        'gemini-1.5-flash',     // Faster model
+        'gemini-1.0-pro',       // Older version
+      ];
+
     if (modelNamesToTry.length === 0) {
       throw new Error('No Gemini models found. Please check your API key and ensure you have access to Gemini models.');
     }
-    
+
     console.log('Trying models:', modelNamesToTry);
-    
+
     let model;
     let modelName = modelNamesToTry[0];
     let lastModelError: Error | null = null;
-    
+
     // Try to find an available model by actually testing API calls
     console.log('Testing models with a simple request...');
     let apiKeyWorks = false;
@@ -151,7 +204,7 @@ async function generateSummary(recordingUrl: string): Promise<string> {
       try {
         modelName = name;
         model = genAI.getGenerativeModel({ model: modelName });
-        
+
         // Try a simple test to see if the model is accessible
         console.log(`Testing model: ${modelName}`);
         const testResult = await model.generateContent('Hello');
@@ -163,7 +216,7 @@ async function generateSummary(recordingUrl: string): Promise<string> {
         lastModelError = err instanceof Error ? err : new Error(String(err));
         const errorMsg = lastModelError.message;
         console.log(`✗ Model ${name} failed: ${errorMsg}`);
-        
+
         // If it's an API key error, stop trying other models
         if (errorMsg.includes('API_KEY') || errorMsg.includes('401') || errorMsg.includes('403') || errorMsg.includes('invalid') || errorMsg.includes('permission')) {
           throw new Error(`Invalid API key or insufficient permissions. Please check your GEMINI_API_KEY in .env.local. Error: ${errorMsg}`);
@@ -171,7 +224,7 @@ async function generateSummary(recordingUrl: string): Promise<string> {
         continue;
       }
     }
-    
+
     if (!model || !apiKeyWorks) {
       const errorDetails = lastModelError?.message || 'Unknown error';
       throw new Error(`No available Gemini model found. Tried: ${modelNamesToTry.join(', ')}. Error: ${errorDetails}. Available models from API: ${availableModels.join(', ') || 'none'}. Please verify your API key is correct and you have access to Gemini models. Get your API key from: https://aistudio.google.com/app/apikey`);
@@ -213,7 +266,7 @@ Keep wording concise and professional.
 Do not add anything that was not in the meeting.`;
 
     console.log(`Sending to Gemini API (${modelName}) with content type: ${contentType}, size: ${fileSizeInMB.toFixed(2)}MB`);
-    
+
     // Generate content with the audio/video file
     // Add retry logic for rate limits and model availability (common in free tier)
     let result;
@@ -221,7 +274,7 @@ Do not add anything that was not in the meeting.`;
     let lastError: any = null;
     let currentModelIndex = modelNamesToTry.indexOf(modelName);
     if (currentModelIndex === -1) currentModelIndex = 0;
-    
+
     while (retries > 0) {
       try {
         // If previous attempt failed with model error, try next model
@@ -237,7 +290,7 @@ Do not add anything that was not in the meeting.`;
             throw new Error(`No available Gemini model found. Tried: ${modelNamesToTry.join(', ')}. Please check your API key and model availability. For free tier, ensure you're using a valid API key from Google AI Studio (https://aistudio.google.com/app/apikey).`);
           }
         }
-        
+
         result = await model.generateContent([
           {
             inlineData: {
@@ -251,7 +304,7 @@ Do not add anything that was not in the meeting.`;
       } catch (apiError: any) {
         lastError = apiError;
         const errorMessage = apiError?.message || '';
-        
+
         // Check if it's a model not found error - try next model
         if (errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('is not found')) {
           currentModelIndex++;
@@ -263,7 +316,7 @@ Do not add anything that was not in the meeting.`;
             throw new Error(`No available Gemini model found. Tried: ${modelNamesToTry.join(', ')}. Please check your API key and model availability. For free tier, ensure you're using a valid API key from Google AI Studio (https://aistudio.google.com/app/apikey).`);
           }
         }
-        
+
         // Check if it's a rate limit error
         if (errorMessage.includes('429') || errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
           retries--;
@@ -304,30 +357,30 @@ Do not add anything that was not in the meeting.`;
     return summary;
   } catch (error) {
     console.error('Gemini API error:', error);
-    
+
     // If direct file processing fails, provide a helpful error message
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
+
     // Check if it's an API key issue
     if (errorMessage.includes('API_KEY') || errorMessage.includes('401') || errorMessage.includes('403')) {
       throw new Error('Invalid or missing Gemini API key. Please check your GEMINI_API_KEY in .env.local');
     }
-    
+
     // Check for rate limits
     if (errorMessage.includes('429') || errorMessage.includes('rate limit') || errorMessage.includes('quota')) {
       throw new Error('Rate limit exceeded. Free tier has usage limits. Please wait a few minutes and try again.');
     }
-    
+
     // Check if it's a file format issue
     if (errorMessage.includes('format') || errorMessage.includes('mimeType') || errorMessage.includes('Invalid')) {
       throw new Error('Unsupported recording format. Please ensure the recording is in a supported audio/video format (MP3, MP4, WAV, etc.).');
     }
-    
+
     // Check for file size issues
     if (errorMessage.includes('size') || errorMessage.includes('too large')) {
       throw new Error('Recording file is too large. Free tier supports files up to ~20MB. Please use a shorter recording or upgrade your plan.');
     }
-    
+
     throw new Error(`Failed to generate summary: ${errorMessage}`);
   }
 }

@@ -129,6 +129,11 @@ const CallList = ({ type }: { type: 'ended' | 'upcoming' | 'recordings' }) => {
                 ? (meeting as CallRecording).url
                 : undefined
             }
+            callId={
+              type === 'recordings'
+                ? (meeting as any).call_id
+                : (meeting as Call).id
+            }
           />
         ))
       ) : (

@@ -27,6 +27,7 @@ interface MeetingCardProps {
   link: string;
   isRecording?: boolean;
   recordingId?: string;
+  callId?: string;
 }
 
 const MeetingCard = ({
@@ -40,6 +41,7 @@ const MeetingCard = ({
   buttonText,
   isRecording = false,
   recordingId,
+  callId,
 }: MeetingCardProps) => {
   const { toast } = useToast();
   const [isSummarizing, setIsSummarizing] = useState(false);
@@ -59,6 +61,7 @@ const MeetingCard = ({
         body: JSON.stringify({
           recordingUrl: link,
           recordingId: recordingId || link,
+          callId,
         }),
       });
 

@@ -22,3 +22,19 @@ export const tokenProvider = async () => {
 
   return token;
 };
+
+export const getCallById = async (id: string) => {
+  const user = await currentUser();
+  if (!user) throw new Error('User is not authenticated');
+
+  if (!STREAM_API_KEY) throw new Error('Stream API key secret is missing');
+  if (!STREAM_API_SECRET) throw new Error('Stream API secret is missing');
+
+  const streamClient = new StreamClient(STREAM_API_KEY, STREAM_API_SECRET);
+
+  const { calls } = await streamClient.video.queryCalls({
+    filter_conditions: { id },
+  });
+
+  return calls.length > 0 ? calls[0] : null;
+};
