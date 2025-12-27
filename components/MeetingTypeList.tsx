@@ -61,7 +61,7 @@ const MeetingTypeList = () => {
           .filter((email) => email.trim() !== '')
           .join(',');
 
-        const meetingUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/meeting/${call.id}`;
+        const meetingUrl = `${window.location.origin}/meeting/${call.id}`;
         const subject = `Join my meeting: ${description}`;
         const body = `Please join the meeting at: ${meetingUrl}`;
         const gmailLink = `https://mail.google.com/mail/?view=cm&fs=1&to=${emails}&su=${encodeURIComponent(
@@ -84,8 +84,6 @@ const MeetingTypeList = () => {
   };
 
   if (!client || !user) return <Loader />;
-
-  const meetingLink = `${process.env.NEXT_PUBLIC_BASE_URL}/meeting/${callDetail?.id}`;
 
   return (
     <section className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
@@ -170,7 +168,9 @@ const MeetingTypeList = () => {
           onClose={() => setMeetingState(undefined)}
           title="Meeting Created"
           handleClick={() => {
-            navigator.clipboard.writeText(meetingLink);
+            navigator.clipboard.writeText(
+              `${window.location.origin}/meeting/${callDetail?.id}`,
+            );
             toast({ title: 'Link Copied' });
           }}
           image={'/icons/checked.svg'}

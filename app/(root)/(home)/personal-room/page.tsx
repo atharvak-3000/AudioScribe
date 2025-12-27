@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from 'react';
+
 import { useUser } from "@clerk/nextjs";
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { useRouter } from "next/navigation";
@@ -54,6 +56,15 @@ const PersonalRoom = () => {
   };
 
   const meetingLink = `${process.env.NEXT_PUBLIC_BASE_URL}/meeting/${meetingId}?personal=true`;
+  const [currentMeetingLink, setCurrentMeetingLink] = useState(meetingLink);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCurrentMeetingLink(
+        `${window.location.origin}/meeting/${meetingId}?personal=true`,
+      );
+    }
+  }, [meetingId]);
 
   return (
     <section className="flex size-full flex-col gap-10 text-white">
@@ -61,7 +72,7 @@ const PersonalRoom = () => {
       <div className="flex w-full flex-col gap-8 xl:max-w-[900px]">
         <Table title="Topic" description={`${user?.username}'s Meeting Room`} />
         <Table title="Meeting ID" description={meetingId!} />
-        <Table title="Invite Link" description={meetingLink} />
+        <Table title="Invite Link" description={currentMeetingLink} />
       </div>
       <div className="flex gap-5">
         <Button className="bg-blue-1" onClick={startRoom}>
@@ -70,7 +81,7 @@ const PersonalRoom = () => {
         <Button
           className="bg-dark-3"
           onClick={() => {
-            navigator.clipboard.writeText(meetingLink);
+            navigator.clipboard.writeText(currentMeetingLink);
             toast({
               title: "Link Copied",
             });
